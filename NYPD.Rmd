@@ -1,0 +1,204 @@
+---
+title: "NYPD Shootings Incident Data (Historic)"
+author: "Emilio Fernández Lemmen Meyer"
+date: "October 4th, 2023"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+This document provides an overview and basic analysis of the NYPD Shooting Incident Database. This data-set contains various details about shooting incidents in New York City, including the date, time, location, and characteristics of both the victim and the perpetrator.
+
+## Loading libraries
+
+We need to load the libraries that we will be working with to import, clean and understand the csv file. Those packages are: tidyverse, lubridate, ggplot2, and dplyr.
+
+```{r}
+# Load needed libraries
+
+library(tidyverse) 
+library(lubridate) 
+library(ggplot2) 
+library(dplyr) 
+```
+
+## Importing and reading the data
+
+```{r}
+# Load the NYPD Shooting Incident Data from the URL
+nypd_shootings <- read_csv("https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD")
+```
+
+We want to preview the first lines of the data.
+
+```{r}
+# Show the first few rows of the data
+head(nypd_shootings)
+```
+
+## Cleaning the data
+
+We will be removing unnecessary columns, because they are not needed for this analysis. Also we will be replacing missing values with "NA" instead of dropping them as to retain as much useful data as possible, and we will also convert 'OCCUR_DATE' do Date type.
+
+```{r}
+# Drop the unnecessary columns
+columns_to_drop <- c('LOC_OF_OCCUR_DESC', 'LOC_CLASSFCTN_DESC', 'LOCATION_DESC', 'Lon_Lat')
+nypd_data_cleaned <- nypd_shootings %>% select(-all_of(columns_to_drop))
+
+# Convert 'OCCUR_DATE' to Date type
+nypd_data_cleaned$OCCUR_DATE <- as.Date(nypd_data_cleaned$OCCUR_DATE, format="%m/%d/%Y")
+
+# Replace missing values in categorical columns with 'N/A'
+categorical_columns <- c('PERP_AGE_GROUP', 'PERP_SEX', 'PERP_RACE')
+nypd_data_cleaned[categorical_columns] <- lapply(nypd_data_cleaned[categorical_columns], function(x) replace_na(as.character(x), 'N/A'))
+
+# Replace missing values in numeric columns with a specific number, e.g., -9999
+numeric_columns <- c('JURISDICTION_CODE', 'Latitude', 'Longitude')
+nypd_data_cleaned[numeric_columns] <- lapply(nypd_data_cleaned[numeric_columns], function(x) replace_na(x, -9999))
+
+# Show the cleaned data
+head(nypd_data_cleaned)
+```
+
+Lets confirm there are no missing values.
+
+```{r}
+sum(is.na(nypd_data_cleaned))
+```
+
+## Exploratory Data Analysis
+
+We want to understand the number of incidents of each borough.
+
+```{r}
+# Count the number of incidents by borough
+borough_count <- nypd_data_cleaned %>% 
+  group_by(BORO) %>% 
+  summarise(count = n())
+
+# Plot the data
+ggplot(borough_count, aes(x = BORO, y = count, fill = BORO)) +
+  geom_bar(stat = "identity") +
+  ggtitle("Number of Incidents by Borough") +
+  xlab("Borough") +
+  ylab("Count")
+```
+
+The bar plot illustrates the distribution of shooting incidents across various boroughs. It's evident that boroughs such as Brooklyn and the Bronx have notably higher numbers of incidents in comparison to others like Staten Island. Exploring the factors contributing to these disparities in incident rates could be a significant area for further investigation.
+
+Let's plot the incidents over time in general, and also another plot over time and by borough.
+
+```{r}
+# Count the number of incidents by year
+year_count <- nypd_data_cleaned %>% 
+  mutate(year = year(OCCUR_DATE)) %>% 
+  group_by(year) %>% 
+  summarise(count = n())
+
+# Plot the data
+ggplot(year_count, aes(x = year, y = count)) +
+  geom_line() +
+  ggtitle("Number of Incidents Over Time") +
+  xlab("Year") +
+  ylab("Count")
+
+
+```
+
+The line plot displays the trend of shooting incidents over the years. Observing whether the trend is increasing or decreasing could be crucial for policy decisions. Fluctuations over time might also coincide with specific events or policy changes.
+
+```{r}
+# Count the number of incidents by year and borough
+year_borough_count <- nypd_data_cleaned %>% 
+  mutate(year = year(OCCUR_DATE)) %>% 
+  group_by(year, BORO) %>% 
+  summarise(count = n())
+
+# Plot the data with different lines for each borough
+ggplot(year_borough_count, aes(x = year, y = count, color = BORO)) +
+  geom_line() +
+  ggtitle("Number of Incidents Over Time by Borough") +
+  xlab("Year") +
+  ylab("Count") +
+  theme(legend.title = element_blank())
+```
+
+This plot adds another layer to the previous time-series plot by breaking down the incidents by borough. It can help identify whether specific boroughs were improving over time, and it is notable that around 2019, the incidents increased across all boroughs except for Staten Island.
+
+Incidents by Victim's Race
+
+```{r}
+# Count the number of incidents by victim's race
+vic_race_count <- nypd_data_cleaned %>% 
+  group_by(VIC_RACE) %>% 
+  summarise(count = n())
+
+# Plot the data
+ggplot(vic_race_count, aes(x = VIC_RACE, y = count, fill = VIC_RACE)) +
+  geom_bar(stat = "identity") +
+  ggtitle("Number of Incidents by Victim's Race") +
+  xlab("Victim's Race") +
+  ylab("Count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+The bar plot illustrates the racial distribution of victims involved in shooting incidents. It is evident that the primary group affected comprises individuals of Black ethnicity, as indicated by the variables provided in the data-set. This data can serve as a starting point for discussions on racial disparities; however, it should be interpreted with caution and within the context of the racial composition of the overall population.
+
+Number of incidents by Perpetrators Race
+
+```{r}
+# Count the number of incidents by perpetrator's race
+perp_race_count <- nypd_data_cleaned %>% 
+  group_by(PERP_RACE) %>% 
+  summarise(count = n())
+
+# Plot the data
+ggplot(perp_race_count, aes(x = PERP_RACE, y = count, fill = PERP_RACE)) +
+  geom_bar(stat = "identity") +
+  ggtitle("Number of Incidents by Perpetrator's Race") +
+  xlab("Perpetrator's Race") +
+  ylab("Count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+Similar to the plot depicting victim's race, this visualization provides insights into the racial demographics of perpetrators. Once again, the predominant group among perpetrators appears to be individuals of Black ethnicity. However, it's important to note a significant number of missing values and cases where the race of the perpetrator is unknown. This suggests that not all perpetrators are always identified or caught.
+
+## Model: Linear regression
+
+```{r}
+# Fit a linear regression model
+lm_model_time <- lm(count ~ year, data = year_count)
+
+# Summary of the model
+summary(lm_model_time)
+
+# Plot with regression line
+ggplot(year_count, aes(x = year, y = count)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  ggtitle("Linear Regression Model for Incidents Over Time") +
+  xlab("Year") +
+  ylab("Count")
+
+# Fit a linear regression model
+lm_model_borough_time <- lm(count ~ year + BORO, data = year_borough_count)
+
+# Summary of the model
+summary(lm_model_borough_time)
+```
+
+The blue line represents the linear regression, illustrating the trend of incidents over the years. This trend suggests a decline in incidents as time goes on. However, certain data points diverge from this line, indicating that some years experienced more or fewer incidents than the model predicted.
+
+## Conclusion
+
+This project for week 3 aimed to provide an exploratory analysis of the NYPD Shooting Incident Database. We examined the distribution of incidents across boroughs, trends over time, and the racial demographics of both victims and perpetrators. Our analyses revealed significant disparities in incident counts across boroughs and fluctuations in incidents over the years. Furthermore, the data showed notable distributions in the racial demographics of victims and perpetrators.
+
+As an analyst, there is always a potential for personal bias to affect the interpretation of data. In this case, preconceived notions about crime rates, demographics, or boroughs could influence the analysis. Additionally, the method chosen for handling missing data and the focus on NYPD-reported incidents can also introduce bias into the project, either by affecting the statistical properties of the data or by limiting the geographical scope of the analysis.
+
+To mitigate these biases I adhered to a data-driven approach, ensuring that all conclusions are based solely on the data provided, and I explicitly stated our methods for handling missing data and acknowledged the limitations of focusing only on NYPD-reported incidents.
